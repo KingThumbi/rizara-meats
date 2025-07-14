@@ -1,0 +1,6 @@
+README.md
+setup.py
+backend/rizara_meats.egg-info/PKG-INFO
+backend/rizara_meats.egg-info/SOURCES.txt
+backend/rizara_meats.egg-info/dependency_links.txt
+backend/rizara_meats.egg-info/top_level.txt

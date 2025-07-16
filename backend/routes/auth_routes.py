@@ -1,67 +1,50 @@
+# backend/routes/auth_routes.py
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-import datetime
-from app import db
-from models.user import User
+from flask_jwt_extended import create_access_token
+from backend.extensions import db
+from backend.models.user import User
 
 auth_bp = Blueprint('auth', __name__)
-
-# 🔐 Replace with environment variable in production
-SECRET_KEY = 'your-secret-key'
-
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
+    required_fields = ['name', 'email', 'password', 'phone', 'id_number', 'user_type']
 
-    if not data:
-        return jsonify({'message': 'No input data provided'}), 400
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Missing required fields'}), 400
 
-    # Check if user already exists
     if User.query.filter_by(email=data['email']).first():
-        return jsonify({'message': 'User already exists'}), 409
+        return jsonify({'error': 'Email already exists'}), 409
 
-    hashed_password = generate_password_hash(data['password'])
+    hashed_pw = generate_password_hash(data['password'])
 
     new_user = User(
+        name=data['name'],
         email=data['email'],
-        password=hashed_password,
-        name=data.get('name'),
-        phone=data.get('phone'),
-        national_id=data.get('national_id'),
-        user_type=data.get('user_type', 'customer')
+        password=hashed_pw,
+        phone=data['phone'],
+        id_number=data['id_number'],
+        user_type=data['user_type']
     )
 
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({
-        'message': 'User registered successfully',
-        'user_type': new_user.user_type
-    }), 201
-
+    return jsonify({'message': 'User registered successfully'}), 201
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
+    user = User.query.filter_by(email=data.get('email')).first()
 
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({'message': 'Email and password are required'}), 400
+    if user and check_password_hash(user.password, data.get('password')):
+        access_token = create_access_token(identity={
+            'id': user.id,
+            'email': user.email,
+            'user_type': user.user_type
+        })
+        return jsonify(token=access_token, user_type=user.user_type)
 
-    user = User.query.filter_by(email=data['email']).first()
-
-    if not user or not check_password_hash(user.password, data['password']):
-        return jsonify({'message': 'Invalid credentials'}), 401
-
-    token = jwt.encode({
-        'user_id': user.id,
-        'email': user.email,
-        'user_type': user.user_type,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=12)
-    }, SECRET_KEY, algorithm='HS256')
-
-    return jsonify({
-        'token': token,
-        'user_type': user.user_type
-    }), 200
+    return jsonify({'error': 'Invalid credentials'}), 401
